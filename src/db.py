@@ -45,13 +45,24 @@ def init_db():
         name VARCHAR(255) UNIQUE NOT NULL
     )''')
 
-    # Device metadata
+        # Device metadata
     c.execute('''CREATE TABLE IF NOT EXISTS devices (
         mac VARCHAR(17) PRIMARY KEY,
         person_id INT,
         category VARCHAR(50),
         FOREIGN KEY(person_id) REFERENCES people(id)
     )''')
+
+    # Add hidden and custom_name columns if they don't exist
+    try:
+        c.execute('ALTER TABLE devices ADD COLUMN is_hidden TINYINT(1) DEFAULT 0')
+    except Exception:
+        pass
+
+    try:
+        c.execute('ALTER TABLE devices ADD COLUMN custom_name VARCHAR(255) DEFAULT NULL')
+    except Exception:
+        pass
 
     # Device usage history
     c.execute('''CREATE TABLE IF NOT EXISTS usage_history (

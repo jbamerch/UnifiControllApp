@@ -42,8 +42,8 @@ def clients():
 
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT mac, person_id, category FROM devices")
-        db_devices = {row['mac']: {'person_id': row['person_id'], 'category': row['category']} for row in cursor.fetchall()}
+        cursor.execute("SELECT mac, person_id, category, is_hidden, custom_name FROM devices")
+        db_devices = {row['mac']: {'person_id': row['person_id'], 'category': row['category'], 'is_hidden': row['is_hidden'], 'custom_name': row['custom_name']} for row in cursor.fetchall()}
 
         cursor.execute("SELECT id, name FROM people")
         people = {row['id']: row['name'] for row in cursor.fetchall()}
@@ -53,10 +53,15 @@ def clients():
             mac = u.get('mac')
             if mac in db_devices:
                 u['category'] = db_devices[mac]['category']
+                u['is_hidden'] = db_devices[mac]['is_hidden']
+                u['custom_name'] = db_devices[mac]['custom_name']
                 pid = db_devices[mac]['person_id']
                 u['person_id'] = pid
                 if pid and pid in people:
                     u['person_name'] = people[pid]
+            else:
+                u['is_hidden'] = 0
+                u['custom_name'] = None
 
         return jsonify(users_data)
     except Exception as e:
@@ -129,6 +134,8 @@ def update_device(mac):
     data = request.json
     person_id = data.get('person_id')
     category = data.get('category')
+    is_hidden = data.get('is_hidden')
+    custom_name = data.get('custom_name')
 
     conn = get_db()
     cursor = conn.cursor()
@@ -142,6 +149,15 @@ def update_device(mac):
 
     if category is not None:
         cursor.execute("UPDATE devices SET category = %s WHERE mac = %s", (category, mac))
+
+    if is_hidden is not None:
+        cursor.execute("UPDATE devices SET is_hidden = %s WHERE mac = %s", (is_hidden, mac))
+
+    if custom_name is not None:
+        if custom_name == '':
+            cursor.execute("UPDATE devices SET custom_name = NULL WHERE mac = %s", (mac,))
+        else:
+            cursor.execute("UPDATE devices SET custom_name = %s WHERE mac = %s", (custom_name, mac))
 
     conn.commit()
     conn.close()

@@ -64,11 +64,15 @@
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="wired-tab" data-bs-toggle="tab" data-bs-target="#wired" type="button" role="tab"><i class="bi bi-ethernet me-2"></i>Wired Devices</button>
           </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link text-secondary" id="hidden-tab" data-bs-toggle="tab" data-bs-target="#hidden" type="button" role="tab"><i class="bi bi-eye-slash-fill me-2"></i>Hidden Devices</button>
+          </li>
         </ul>
 
         <div class="tab-content" id="myTabContent">
           <div class="tab-pane fade show active" id="wifi" role="tabpanel"></div>
           <div class="tab-pane fade" id="wired" role="tabpanel"></div>
+          <div class="tab-pane fade" id="hidden" role="tabpanel"></div>
         </div>
     </div>
 
@@ -223,21 +227,30 @@
         function renderClients() {
             const wifiContainer = document.getElementById('wifi');
             const wiredContainer = document.getElementById('wired');
+            const hiddenContainer = document.getElementById('hidden');
             wifiContainer.innerHTML = '';
             wiredContainer.innerHTML = '';
+            hiddenContainer.innerHTML = '';
 
             const groups = {
                 wifi: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] },
-                wired: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] }
+                wired: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] },
+                hidden: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] }
             };
 
             clients.forEach(client => {
                 const isWired = client.is_wired;
+                const isHidden = client.is_hidden == 1;
                 const cat = (client.category || 'uncategorized').toLowerCase();
                 const safeCat = groups.wifi[cat] ? cat : 'uncategorized';
 
-                if (isWired) groups.wired[safeCat].push(client);
-                else groups.wifi[safeCat].push(client);
+                if (isHidden) {
+                    groups.hidden[safeCat].push(client);
+                } else if (isWired) {
+                    groups.wired[safeCat].push(client);
+                } else {
+                    groups.wifi[safeCat].push(client);
+                }
             });
 
             const renderGroup = (groupData, container) => {
@@ -252,10 +265,13 @@
                     row.className = 'row g-4';
 
                     devs.forEach(client => {
-                        const name = client.name || client.hostname || 'Unknown Device';
+                        const originalName = client.name || client.hostname || 'Unknown Device';
+                        const name = client.custom_name || originalName;
+                        const isRenamed = !!client.custom_name;
                         const mac = client.mac;
                         const ip = client.ip || 'N/A';
                         const isBlocked = client.blocked || false;
+                        const isHidden = client.is_hidden == 1;
 
                         const col = document.createElement('div');
                         col.className = 'col-md-6 col-lg-4';
@@ -263,12 +279,22 @@
                         col.innerHTML = `
                             <div class="card device-card h-100 ${isBlocked ? 'blocked' : 'active'}">
                                 <div class="card-body d-flex flex-column">
-                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
                                         <div>
-                                            <h6 class="card-title fw-bold mb-1 text-truncate" style="max-width: 200px;" title="${escapeHTML(name)}">${escapeHTML(name)}</h6>
+                                            <h6 class="card-title fw-bold mb-1 text-truncate" style="max-width: 180px;" title="${escapeHTML(name)}">
+                                                ${escapeHTML(name)}
+                                                <button class="btn btn-sm btn-link text-secondary p-0 ms-1" onclick="promptRename('${escapeHTML(mac)}', '${escapeHTML(name)}')"><i class="bi bi-pencil-square"></i></button>
+                                            </h6>
+                                            ${isRenamed ? `<div class="small text-muted mb-1" style="font-size: 0.75rem;">(${escapeHTML(originalName)})</div>` : ''}
                                             <p class="text-muted small mb-0 font-monospace">${escapeHTML(ip)}<br>${escapeHTML(mac)}</p>
                                         </div>
-                                        <i class="bi ${getCategoryIcon(cat)} fs-4 text-secondary"></i>
+                                        <div class="text-end">
+                                            <i class="bi ${getCategoryIcon(cat)} fs-4 text-secondary mb-2 d-block"></i>
+                                            ${isHidden
+                                                ? `<button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Unhide" onclick="updateDeviceProp('${escapeHTML(mac)}', 'is_hidden', 0)"><i class="bi bi-eye"></i></button>`
+                                                : `<button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Hide" onclick="updateDeviceProp('${escapeHTML(mac)}', 'is_hidden', 1)"><i class="bi bi-eye-slash"></i></button>`
+                                            }
+                                        </div>
                                     </div>
 
                                     <div class="mt-auto">
@@ -306,9 +332,16 @@
 
             renderGroup(groups.wifi, wifiContainer);
             renderGroup(groups.wired, wiredContainer);
+            renderGroup(groups.hidden, hiddenContainer);
         }
 
-        async function toggleBlock(mac, block) {
+        function promptRename(mac, currentName) {
+            const newName = prompt("Enter a new name for this device:", currentName);
+            if (newName !== null) {
+                updateDeviceProp(mac, 'custom_name', newName === '' ? '' : newName);
+            }
+        }
+async function toggleBlock(mac, block) {
             const action = block ? 'block' : 'unblock';
             try {
                 const response = await fetch(`/api/client/${mac}/${action}`, { method: 'POST' });
