@@ -9,7 +9,10 @@ services:
       - UNIFI_HOST=192.168.1.1
       - UNIFI_USER=admin
       - UNIFI_PASS=password
+      - DB_PATH=/app/data/data.db
       # - UNIFI_VERSION=UDMP-unifiOS
       # - UNIFI_SITE=default
       # - UNIFI_PORT=443
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped

@@ -7,33 +7,57 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .device-card {
-            margin-bottom: 20px;
-        }
-        .chart-container {
-            position: relative;
-            height: 200px;
-            width: 100%;
-        }
+        .device-card { margin-bottom: 20px; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        .group-header { margin-top: 30px; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 2px solid #eee; }
+        .network-group { margin-bottom: 40px; }
     </style>
 </head>
 <body>
     <div class="container mt-4">
         <h1>Unifi Client Manager</h1>
-        <button class="btn btn-primary mb-3" onclick="loadClients()">Refresh Clients</button>
 
-        <div id="loading" class="d-none">Loading...</div>
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Manage People</h5>
+                        <div class="input-group mb-3">
+                            <input type="text" id="newPersonName" class="form-control" placeholder="New Person Name">
+                            <button class="btn btn-primary" onclick="addPerson()">Add</button>
+                        </div>
+                        <ul class="list-group" id="peopleList">
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                 <button class="btn btn-secondary mt-4" onclick="loadData()">Refresh All</button>
+                 <div id="loading" class="d-none mt-2 text-primary">Loading...</div>
+            </div>
+        </div>
 
-        <div id="clients-list" class="row"></div>
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="wifi-tab" data-bs-toggle="tab" data-bs-target="#wifi" type="button" role="tab">WiFi Devices</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="wired-tab" data-bs-toggle="tab" data-bs-target="#wired" type="button" role="tab">Wired Devices</button>
+          </li>
+        </ul>
+        <div class="tab-content" id="myTabContent">
+          <div class="tab-pane fade show active p-3" id="wifi" role="tabpanel"></div>
+          <div class="tab-pane fade p-3" id="wired" role="tabpanel"></div>
+        </div>
     </div>
 
     <!-- Modal for History -->
-    <div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
+    <div class="modal fade" id="historyModal" tabindex="-1">
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="historyModalLabel">Data Usage History</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
             <div class="mb-3">
@@ -55,9 +79,13 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        let clients = [];
+        let people = [];
+        let currentChart = null;
+        let currentHistoryData = [];
 
         function escapeHTML(str) {
-            if (!str) return '';
+            if (typeof str !== 'string') return '';
             return str.replace(/[&<>'"]/g,
                 tag => ({
                     '&': '&amp;',
@@ -69,56 +97,161 @@
             );
         }
 
-        let clients = [];
-        let currentChart = null;
-        let currentHistoryData = [];
-
-        async function loadClients() {
+        async function loadData() {
             document.getElementById('loading').classList.remove('d-none');
-            document.getElementById('clients-list').innerHTML = '';
             try {
-                const response = await fetch('/api/clients');
-                clients = await response.json();
+                const [clientsRes, peopleRes] = await Promise.all([
+                    fetch('/api/clients'),
+                    fetch('/api/people')
+                ]);
+                clients = await clientsRes.json();
+                people = await peopleRes.json();
+                renderPeople();
                 renderClients();
             } catch (error) {
-                alert('Error loading clients: ' + error);
+                alert('Error loading data: ' + error);
             }
             document.getElementById('loading').classList.add('d-none');
         }
 
-        function renderClients() {
-            const container = document.getElementById('clients-list');
-            container.innerHTML = '';
+        async function addPerson() {
+            const name = document.getElementById('newPersonName').value;
+            if (!name) return;
+            await fetch('/api/people', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name})
+            });
+            document.getElementById('newPersonName').value = '';
+            loadData();
+        }
 
-            clients.forEach(client => {
-                const name = escapeHTML(client.name || client.hostname || 'Unknown Device');
-                const mac = escapeHTML(client.mac);
-                const ip = escapeHTML(client.ip || 'N/A');
-                const isBlocked = client.blocked || false;
+        async function togglePerson(personId, block) {
+            const action = block ? 'block' : 'unblock';
+            await fetch(`/api/person/${personId}/${action}`, { method: 'POST' });
+            loadData();
+        }
 
-                const col = document.createElement('div');
-                col.className = 'col-md-4';
-
-                col.innerHTML = `
-                    <div class="card device-card ${isBlocked ? 'bg-light text-muted' : ''}">
-                        <div class="card-body">
-                            <h5 class="card-title">${name}</h5>
-                            <p class="card-text">
-                                MAC: ${mac}<br>
-                                IP: ${ip}
-                            </p>
-                            <div class="d-flex justify-content-between">
-                                <button class="btn btn-sm btn-info text-white" data-mac="${mac}" data-name="${name}" onclick="viewHistory(this)">View Usage</button>
-                                ${isBlocked
-                                    ? `<button class="btn btn-sm btn-success" onclick="toggleBlock('${mac}', false)">Unpause Data</button>`
-                                    : `<button class="btn btn-sm btn-warning" onclick="toggleBlock('${mac}', true)">Pause Data</button>`
-                                }
-                            </div>
-                        </div>
+        function renderPeople() {
+            const list = document.getElementById('peopleList');
+            list.innerHTML = '';
+            people.forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `
+                    <span>${escapeHTML(p.name)}</span>
+                    <div>
+                        <button class="btn btn-sm btn-warning" onclick="togglePerson(${p.id}, true)">Pause All</button>
+                        <button class="btn btn-sm btn-success" onclick="togglePerson(${p.id}, false)">Unpause All</button>
                     </div>
                 `;
-                container.appendChild(col);
+                list.appendChild(li);
             });
+        }
+
+        function getCategoryOptions(selectedCat) {
+            const cats = ['Phone', 'Tablet', 'Computer', 'IOT', 'Other'];
+            let html = `<option value="">Uncategorized</option>`;
+            cats.forEach(c => {
+                const sel = (c.toLowerCase() === (selectedCat || '').toLowerCase()) ? 'selected' : '';
+                html += `<option value="${c}" ${sel}>${c}</option>`;
+            });
+            return html;
+        }
+
+        function getPeopleOptions(selectedPersonId) {
+            let html = `<option value="">Unassigned</option>`;
+            people.forEach(p => {
+                const sel = (p.id === selectedPersonId) ? 'selected' : '';
+                html += `<option value="${p.id}" ${sel}>${escapeHTML(p.name)}</option>`;
+            });
+            return html;
+        }
+
+        async function updateDeviceProp(mac, prop, value) {
+            const body = {};
+            body[prop] = value;
+            await fetch(`/api/device/${mac}/update`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            loadData();
+        }
+
+        function renderClients() {
+            const wifiContainer = document.getElementById('wifi');
+            const wiredContainer = document.getElementById('wired');
+            wifiContainer.innerHTML = '';
+            wiredContainer.innerHTML = '';
+
+            const groups = {
+                wifi: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] },
+                wired: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] }
+            };
+
+            clients.forEach(client => {
+                const isWired = client.is_wired;
+                const cat = (client.category || 'uncategorized').toLowerCase();
+                const safeCat = groups.wifi[cat] ? cat : 'uncategorized';
+
+                if (isWired) groups.wired[safeCat].push(client);
+                else groups.wifi[safeCat].push(client);
+            });
+
+            const renderGroup = (groupData, container) => {
+                Object.keys(groupData).forEach(cat => {
+                    const devs = groupData[cat];
+                    if (devs.length === 0) return;
+
+                    const title = cat.charAt(0).toUpperCase() + cat.slice(1);
+                    container.innerHTML += `<h3 class="group-header">${title}</h3>`;
+
+                    const row = document.createElement('div');
+                    row.className = 'row';
+
+                    devs.forEach(client => {
+                        const name = client.name || client.hostname || 'Unknown Device';
+                        const mac = client.mac;
+                        const ip = client.ip || 'N/A';
+                        const isBlocked = client.blocked || false;
+
+                        const col = document.createElement('div');
+                        col.className = 'col-md-4';
+
+                        col.innerHTML = `
+                            <div class="card device-card ${isBlocked ? 'bg-light border-warning' : ''}">
+                                <div class="card-body">
+                                    <h5 class="card-title">${escapeHTML(name)}</h5>
+                                    <p class="card-text text-muted small mb-2">MAC: ${escapeHTML(mac)} <br> IP: ${escapeHTML(ip)}</p>
+
+                                    <div class="mb-2">
+                                        <select class="form-select form-select-sm mb-1" onchange="updateDeviceProp('${escapeHTML(mac)}', 'category', this.value)">
+                                            ${getCategoryOptions(client.category)}
+                                        </select>
+                                        <select class="form-select form-select-sm" onchange="updateDeviceProp('${escapeHTML(mac)}', 'person_id', this.value)">
+                                            ${getPeopleOptions(client.person_id)}
+                                        </select>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between mt-3">
+                                        <button class="btn btn-sm btn-info text-white" data-mac="${escapeHTML(mac)}" data-name="${escapeHTML(name)}" onclick="viewHistory(this)">Usage</button>
+                                        ${isBlocked
+                                            ? `<button class="btn btn-sm btn-success" onclick="toggleBlock('${escapeHTML(mac)}', false)">Unpause</button>`
+                                            : `<button class="btn btn-sm btn-warning" onclick="toggleBlock('${escapeHTML(mac)}', true)">Pause</button>`
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        row.appendChild(col);
+                    });
+                    container.appendChild(row);
+                });
+            };
+
+            renderGroup(groups.wifi, wifiContainer);
+            renderGroup(groups.wired, wiredContainer);
         }
 
         async function toggleBlock(mac, block) {
@@ -126,7 +259,7 @@
             try {
                 const response = await fetch(`/api/client/${mac}/${action}`, { method: 'POST' });
                 if (response.ok) {
-                    loadClients(); // Reload to reflect changes
+                    loadData();
                 } else {
                     const error = await response.json();
                     alert('Error: ' + error.error);
@@ -162,12 +295,33 @@
             const hours = parseInt(document.getElementById('timeRange').value);
             const cutoffTime = Date.now() - (hours * 60 * 60 * 1000);
 
+            // For a cumulative chart, we want to show the difference between points
+            // Since our DB stores cumulative tx/rx bytes at each poll interval
+
             const filteredData = currentHistoryData.filter(d => d.time > cutoffTime);
+            if(filteredData.length < 2) return; // Need at least 2 points for difference
 
-            const labels = filteredData.map(d => new Date(d.time).toLocaleString());
-            const rxData = filteredData.map(d => (d.rx_bytes || 0) / (1024*1024)); // Convert to MB
-            const txData = filteredData.map(d => (d.tx_bytes || 0) / (1024*1024));
+            const labels = [];
+            const rxData = [];
+            const txData = [];
 
+            for(let i=1; i < filteredData.length; i++) {
+                const prev = filteredData[i-1];
+                const curr = filteredData[i];
+
+                labels.push(new Date(curr.time).toLocaleString());
+
+                // Diff in bytes, convert to MB
+                let diffRx = (curr.rx_bytes - prev.rx_bytes) / (1024*1024);
+                let diffTx = (curr.tx_bytes - prev.tx_bytes) / (1024*1024);
+
+                // If device rebooted, counters reset to 0
+                if (diffRx < 0) diffRx = curr.rx_bytes / (1024*1024);
+                if (diffTx < 0) diffTx = curr.tx_bytes / (1024*1024);
+
+                rxData.push(diffRx);
+                txData.push(diffTx);
+            }
 
             const ctx = document.getElementById('usageChart').getContext('2d');
             currentChart = new Chart(ctx, {
@@ -175,34 +329,19 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        {
-                            label: 'Download (MB)',
-                            data: rxData,
-                            borderColor: 'rgb(75, 192, 192)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Upload (MB)',
-                            data: txData,
-                            borderColor: 'rgb(255, 99, 132)',
-                            tension: 0.1
-                        }
+                        { label: 'Download (MB)', data: rxData, borderColor: 'rgb(75, 192, 192)', tension: 0.1 },
+                        { label: 'Upload (MB)', data: txData, borderColor: 'rgb(255, 99, 132)', tension: 0.1 }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
+                    scales: { y: { beginAtZero: true } }
                 }
             });
         }
 
-        // Initial load
-        loadClients();
+        loadData();
     </script>
 </body>
 </html>

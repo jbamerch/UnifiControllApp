@@ -2,6 +2,12 @@ from flask import Flask, render_template, request, jsonify
 from pyunifi.controller import Controller
 import os
 import time
+from db import init_db, get_db
+from background import start_background_task
+
+# Initialize DB and start background task
+
+
 
 app = Flask(__name__)
 
@@ -32,12 +38,26 @@ def index():
 def clients():
     try:
         c = get_unifi_controller()
-        # get_users returns all known clients (online and offline)
-        # stat/sta returns active clients.
-        # We can fetch both and merge to know who is online,
-        # or just use stat/sta if only active ones are needed. Let's use get_users for all.
         users_data = c.get_users()
-        # Ensure we can return them nicely
+
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT mac, person_id, category FROM devices")
+        db_devices = {row['mac']: {'person_id': row['person_id'], 'category': row['category']} for row in cursor.fetchall()}
+
+        cursor.execute("SELECT id, name FROM people")
+        people = {row['id']: row['name'] for row in cursor.fetchall()}
+        conn.close()
+
+        for u in users_data:
+            mac = u.get('mac')
+            if mac in db_devices:
+                u['category'] = db_devices[mac]['category']
+                pid = db_devices[mac]['person_id']
+                u['person_id'] = pid
+                if pid and pid in people:
+                    u['person_name'] = people[pid]
+
         return jsonify(users_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -45,35 +65,25 @@ def clients():
 @app.route('/api/client/<mac>/history')
 def client_history(mac):
     try:
-        c = get_unifi_controller()
-        endtime = time.time()
-        # Get hourly data for the past 30 days
-        params = {
-            "attrs": ["bytes", "rx_bytes", "tx_bytes", "time"],
-            "macs": [mac],
-            "start": int(endtime - 30 * 86400) * 1000,
-            "end": int(endtime) * 1000,
-        }
+        endtime = int(time.time() * 1000)
+        # 30 days
+        starttime = endtime - (30 * 86400 * 1000)
 
-        # Depending on pyunifi version, use the available method to POST
-        try:
-            if hasattr(c, '_api_write'):
-                res = c._api_write("stat/report/hourly.user", params)
-            else:
-                # The reviewer's suggested format
-                url = c.url + "api/s/" + c.site_id + "/stat/report/hourly.user"
-                if "api/s/" in c.url:
-                    url = c.url + "stat/report/hourly.user"
-                elif c.url.endswith('/'):
-                    url = c.url + "api/s/" + c.site_id + "/stat/report/hourly.user"
-                res = c._write(url, params)
-        except Exception as api_err:
-            try:
-                res = c._write(c.url + 'stat/report/hourly.user', params)
-            except Exception as backup_err:
-                raise Exception(f"Failed to fetch history: {api_err} | {backup_err}")
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT time, rx_bytes, tx_bytes FROM usage_history WHERE mac = ? AND time >= ? ORDER BY time ASC", (mac, starttime))
+        rows = cursor.fetchall()
+        conn.close()
 
-        return jsonify(res)
+        history = []
+        for r in rows:
+            history.append({
+                'time': r['time'],
+                'rx_bytes': r['rx_bytes'],
+                'tx_bytes': r['tx_bytes']
+            })
+
+        return jsonify(history)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -95,5 +105,74 @@ def unblock_client(mac):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/people', methods=['GET', 'POST'])
+def manage_people():
+    conn = get_db()
+    cursor = conn.cursor()
+    if request.method == 'POST':
+        name = request.json.get('name')
+        if name:
+            try:
+                cursor.execute("INSERT INTO people (name) VALUES (?)", (name,))
+                conn.commit()
+            except:
+                pass # Probably exists
+
+    cursor.execute("SELECT id, name FROM people")
+    people = [{'id': r['id'], 'name': r['name']} for r in cursor.fetchall()]
+    conn.close()
+    return jsonify(people)
+
+@app.route('/api/device/<mac>/update', methods=['POST'])
+def update_device(mac):
+    data = request.json
+    person_id = data.get('person_id')
+    category = data.get('category')
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO devices (mac) VALUES (?)", (mac,))
+
+    if person_id is not None:
+        if person_id == '':
+            cursor.execute("UPDATE devices SET person_id = NULL WHERE mac = ?", (mac,))
+        else:
+            cursor.execute("UPDATE devices SET person_id = ? WHERE mac = ?", (person_id, mac))
+
+    if category is not None:
+        cursor.execute("UPDATE devices SET category = ? WHERE mac = ?", (category, mac))
+
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'success'})
+
+@app.route('/api/person/<int:person_id>/<action>', methods=['POST'])
+def block_person(person_id, action):
+    if action not in ['block', 'unblock']:
+        return jsonify({'error': 'Invalid action'}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT mac FROM devices WHERE person_id = ?", (person_id,))
+    macs = [r['mac'] for r in cursor.fetchall()]
+    conn.close()
+
+    c = get_unifi_controller()
+    for mac in macs:
+        try:
+            if action == 'block':
+                c.block_client(mac)
+            else:
+                c.unblock_client(mac)
+        except Exception as e:
+            print(f"Error {action}ing {mac}: {e}")
+
+    return jsonify({'status': 'success', 'affected': len(macs)})
+
+
+
 if __name__ == '__main__':
+    init_db()
+    start_background_task()
     app.run(host='0.0.0.0', port=5000)
