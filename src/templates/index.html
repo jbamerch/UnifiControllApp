@@ -30,7 +30,7 @@
             <a class="navbar-brand fw-bold" href="#"><i class="bi bi-router-fill me-2 text-primary"></i>Unifi Manager</a>
             <div class="d-flex align-items-center">
                 <div id="loading" class="spinner-border spinner-border-sm text-primary me-3 d-none" role="status"></div>
-                <button class="btn btn-outline-primary btn-sm btn-custom" onclick="loadData()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+                <button class="btn btn-outline-primary btn-sm btn-custom" onclick="loadData(true)"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
             </div>
         </div>
     </nav>
@@ -120,11 +120,11 @@
             );
         }
 
-        async function loadData() {
+        async function loadData(forceRefresh = false) {
             document.getElementById('loading').classList.remove('d-none');
             try {
                 const [clientsRes, peopleRes] = await Promise.all([
-                    fetch('/api/clients'),
+                    fetch(forceRefresh ? '/api/clients?refresh=true' : '/api/clients'),
                     fetch('/api/people')
                 ]);
                 clients = await clientsRes.json();
@@ -238,6 +238,17 @@
                 hidden: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] }
             };
 
+            // Sort clients by last_seen (descending) then by name (ascending)
+            clients.sort((a, b) => {
+                const seenA = a.last_seen || 0;
+                const seenB = b.last_seen || 0;
+                if (seenB !== seenA) return seenB - seenA; // Descending
+
+                const nameA = (a.custom_name || a.name || a.hostname || '').toLowerCase();
+                const nameB = (b.custom_name || b.name || b.hostname || '').toLowerCase();
+                return nameA.localeCompare(nameB);
+            });
+
             clients.forEach(client => {
                 const isWired = client.is_wired;
                 const isHidden = client.is_hidden == 1;
@@ -269,9 +280,15 @@
                         const name = client.custom_name || originalName;
                         const isRenamed = !!client.custom_name;
                         const mac = client.mac;
-                        const ip = client.ip || 'N/A';
+                        const ip = client.ip || client.last_ip || 'N/A';
                         const isBlocked = client.blocked || false;
                         const isHidden = client.is_hidden == 1;
+
+                        let lastSeenStr = 'Never';
+                        if (client.last_seen) {
+                            const d = new Date(client.last_seen * 1000);
+                            lastSeenStr = d.toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                        }
 
                         const col = document.createElement('div');
                         col.className = 'col-md-6 col-lg-4';
@@ -289,13 +306,14 @@
                                             <p class="text-muted small mb-0 font-monospace">${escapeHTML(ip)}<br>${escapeHTML(mac)}</p>
                                         </div>
                                         <div class="text-end">
-                                            <i class="bi ${getCategoryIcon(cat)} fs-4 text-secondary mb-2 d-block"></i>
+                                            <i class="bi ${getCategoryIcon(cat)} fs-4 text-secondary mb-1 d-block"></i>
                                             ${isHidden
                                                 ? `<button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Unhide" onclick="updateDeviceProp('${escapeHTML(mac)}', 'is_hidden', 0)"><i class="bi bi-eye"></i></button>`
                                                 : `<button class="btn btn-sm btn-outline-secondary py-0 px-2" title="Hide" onclick="updateDeviceProp('${escapeHTML(mac)}', 'is_hidden', 1)"><i class="bi bi-eye-slash"></i></button>`
                                             }
                                         </div>
                                     </div>
+                                    <div class="small text-muted mb-3"><i class="bi bi-clock-history me-1"></i>Seen: ${lastSeenStr}</div>
 
                                     <div class="mt-auto">
                                         <div class="row g-2 mb-3">
@@ -334,8 +352,7 @@
             renderGroup(groups.wired, wiredContainer);
             renderGroup(groups.hidden, hiddenContainer);
         }
-
-        function promptRename(mac, currentName) {
+function promptRename(mac, currentName) {
             const newName = prompt("Enter a new name for this device:", currentName);
             if (newName !== null) {
                 updateDeviceProp(mac, 'custom_name', newName === '' ? '' : newName);

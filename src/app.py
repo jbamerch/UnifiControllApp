@@ -19,16 +19,25 @@ UNIFI_VERSION = os.environ.get('UNIFI_VERSION', 'UDMP-unifiOS') # Assuming UDMP-
 UNIFI_SITE = os.environ.get('UNIFI_SITE', 'default')
 UNIFI_PORT = int(os.environ.get('UNIFI_PORT', '443'))
 
+
+_controller = None
+_cached_users = []
+_last_fetch = 0
+
 def get_unifi_controller():
-    return Controller(
-        UNIFI_HOST,
-        UNIFI_USER,
-        UNIFI_PASS,
-        UNIFI_PORT,
-        UNIFI_VERSION,
-        site_id=UNIFI_SITE,
-        ssl_verify=False
-    )
+    global _controller
+    if _controller is None:
+        _controller = Controller(
+            UNIFI_HOST,
+            UNIFI_USER,
+            UNIFI_PASS,
+            UNIFI_PORT,
+            UNIFI_VERSION,
+            site_id=UNIFI_SITE,
+            ssl_verify=False
+        )
+    return _controller
+
 
 @app.route('/')
 def index():
@@ -36,9 +45,28 @@ def index():
 
 @app.route('/api/clients')
 def clients():
+    global _cached_users, _last_fetch
     try:
-        c = get_unifi_controller()
-        users_data = c.get_users()
+        force_refresh = request.args.get('refresh') == 'true'
+        now = time.time()
+
+        if force_refresh or not _cached_users or (now - _last_fetch > 300):
+            c = get_unifi_controller()
+            try:
+                _cached_users = c.get_users()
+                _last_fetch = now
+            except Exception as e:
+                # If token expired, clear controller and retry once
+                if "401" in str(e) or "Login failed" in str(e):
+                    global _controller
+                    _controller = None
+                    c = get_unifi_controller()
+                    _cached_users = c.get_users()
+                    _last_fetch = now
+                else:
+                    raise e
+
+        users_data = list(_cached_users) # make a copy so we don't modify cache directly with db props
 
         conn = get_db()
         cursor = conn.cursor()
@@ -53,7 +81,15 @@ def clients():
             mac = u.get('mac')
             if mac in db_devices:
                 u['category'] = db_devices[mac]['category']
-                u['is_hidden'] = db_devices[mac]['is_hidden']
+
+                # Ensure JSON serializable types
+                is_hidden_val = db_devices[mac]['is_hidden']
+                try:
+                    u['is_hidden'] = int(is_hidden_val) if is_hidden_val is not None else 0
+                except:
+                    # In case it's a byte string like b''
+                    u['is_hidden'] = 1 if is_hidden_val else 0
+
                 u['custom_name'] = db_devices[mac]['custom_name']
                 pid = db_devices[mac]['person_id']
                 u['person_id'] = pid

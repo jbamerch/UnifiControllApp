@@ -4,15 +4,28 @@ import threading
 from db import get_db
 
 def poll_unifi():
+    from app import _cached_users, _last_fetch, get_unifi_controller
+    import app
+
     while True:
         try:
-            from app import get_unifi_controller
             c = get_unifi_controller()
-            users = c.get_users()
+            try:
+                users = c.get_users()
+            except Exception as e:
+                # Token expired?
+                app._controller = None
+                c = get_unifi_controller()
+                users = c.get_users()
+
+            app._cached_users = users
+            app._last_fetch = time.time()
+
             now = int(time.time() * 1000)
 
             conn = get_db()
             cursor = conn.cursor()
+
 
             for u in users:
                 mac = u.get('mac')
