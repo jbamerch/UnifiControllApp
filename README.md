@@ -38,3 +38,11 @@ A Dockerfile is provided for easy deployment.
 docker build -t unifi-manager .
 docker run -p 5000:5000 -e UNIFI_HOST='192.168.1.1' -e UNIFI_USER='admin' -e UNIFI_PASS='password' unifi-manager
 ```
+
+### Docker Compose
+
+A `docker-compose.yml` file is also provided. You can run the application with the image pushed to Docker Hub by configuring your credentials in the `docker-compose.yml` file and running:
+
+```bash
+docker-compose up -d
+```
