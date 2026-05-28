@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
 
-RUN mkdir -p /app/data
 ENV FLASK_APP=src/app.py
 ENV FLASK_ENV=production
 

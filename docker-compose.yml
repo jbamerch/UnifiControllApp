@@ -1,5 +1,20 @@
 version: '3.8'
+
 services:
+  db:
+    image: mysql:8.0
+    container_name: unifi-manager-db
+    ports:
+      - "3508:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: unifi_manager
+      MYSQL_USER: unifi_user
+      MYSQL_PASSWORD: unifi_pass
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+
   unifi-manager:
     image: abc/unificontrollapp:test
     container_name: unifi-manager
@@ -9,10 +24,17 @@ services:
       - UNIFI_HOST=192.168.1.1
       - UNIFI_USER=admin
       - UNIFI_PASS=password
-      - DB_PATH=/app/data/data.db
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=unifi_user
+      - DB_PASS=unifi_pass
+      - DB_NAME=unifi_manager
       # - UNIFI_VERSION=UDMP-unifiOS
       # - UNIFI_SITE=default
       # - UNIFI_PORT=443
-    volumes:
-      - ./data:/app/data
+    depends_on:
+      - db
     restart: unless-stopped
+
+volumes:
+  db_data:

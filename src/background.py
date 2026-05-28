@@ -20,9 +20,9 @@ def poll_unifi():
                 tx = u.get('tx_bytes', 0)
 
                 # Make sure device exists in devices table
-                cursor.execute('INSERT OR IGNORE INTO devices (mac) VALUES (?)', (mac,))
+                cursor.execute('INSERT IGNORE INTO devices (mac) VALUES (%s)', (mac,))
 
-                cursor.execute('INSERT INTO usage_history (mac, time, rx_bytes, tx_bytes) VALUES (?, ?, ?, ?)',
+                cursor.execute('INSERT INTO usage_history (mac, time, rx_bytes, tx_bytes) VALUES (%s, %s, %s, %s)',
                                (mac, now, rx, tx))
 
             conn.commit()

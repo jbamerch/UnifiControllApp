@@ -71,7 +71,7 @@ def client_history(mac):
 
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT time, rx_bytes, tx_bytes FROM usage_history WHERE mac = ? AND time >= ? ORDER BY time ASC", (mac, starttime))
+        cursor.execute("SELECT time, rx_bytes, tx_bytes FROM usage_history WHERE mac = %s AND time >= %s ORDER BY time ASC", (mac, starttime))
         rows = cursor.fetchall()
         conn.close()
 
@@ -114,7 +114,7 @@ def manage_people():
         name = request.json.get('name')
         if name:
             try:
-                cursor.execute("INSERT INTO people (name) VALUES (?)", (name,))
+                cursor.execute("INSERT INTO people (name) VALUES (%s)", (name,))
                 conn.commit()
             except:
                 pass # Probably exists
@@ -132,16 +132,16 @@ def update_device(mac):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO devices (mac) VALUES (?)", (mac,))
+    cursor.execute("INSERT IGNORE INTO devices (mac) VALUES (%s)", (mac,))
 
     if person_id is not None:
         if person_id == '':
-            cursor.execute("UPDATE devices SET person_id = NULL WHERE mac = ?", (mac,))
+            cursor.execute("UPDATE devices SET person_id = NULL WHERE mac = %s", (mac,))
         else:
-            cursor.execute("UPDATE devices SET person_id = ? WHERE mac = ?", (person_id, mac))
+            cursor.execute("UPDATE devices SET person_id = %s WHERE mac = %s", (person_id, mac))
 
     if category is not None:
-        cursor.execute("UPDATE devices SET category = ? WHERE mac = ?", (category, mac))
+        cursor.execute("UPDATE devices SET category = %s WHERE mac = %s", (category, mac))
 
     conn.commit()
     conn.close()
@@ -154,7 +154,7 @@ def block_person(person_id, action):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT mac FROM devices WHERE person_id = ?", (person_id,))
+    cursor.execute("SELECT mac FROM devices WHERE person_id = %s", (person_id,))
     macs = [r['mac'] for r in cursor.fetchall()]
     conn.close()
 

@@ -202,11 +202,21 @@
         async function updateDeviceProp(mac, prop, value) {
             const body = {};
             body[prop] = value;
-            await fetch(`/api/device/${mac}/update`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body)
-            });
+
+            try {
+                const response = await fetch(`/api/device/${mac}/update`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    alert('Error updating device: ' + err.error);
+                }
+            } catch (e) {
+                alert('Network error updating device: ' + e);
+            }
+
             loadData();
         }
 
