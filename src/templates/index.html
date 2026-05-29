@@ -126,6 +126,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let clients = [];
+        let activeClients = [];
         let people = [];
         let currentChart = null;
         let currentHistoryData = [];
@@ -183,7 +184,7 @@
             const container = document.getElementById('personDevicesList');
             container.innerHTML = '';
 
-            const personClients = clients.filter(c => c.person_id === personId);
+            const personClients = activeClients.filter(c => c.person_id === personId);
 
             if (personClients.length === 0) {
                 container.innerHTML = '<div class="col-12 text-muted">No devices assigned to this person.</div>';
@@ -237,7 +238,7 @@
                     // Re-render the container only
                     const container = document.getElementById('personDevicesList');
                     container.innerHTML = '';
-                    const personClients = clients.filter(c => c.person_id === personId);
+                    const personClients = activeClients.filter(c => c.person_id === personId);
                     personClients.forEach(client => {
                         const originalName = client.name || client.hostname || 'Unknown Device';
                         const name = client.custom_name || originalName;
@@ -357,8 +358,18 @@
                 hidden: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] }
             };
 
+            const FORTY_FIVE_DAYS_SEC = 45 * 24 * 60 * 60;
+            const nowSec = Math.floor(Date.now() / 1000);
+
+            // Filter clients active in last 45 days
+            activeClients = clients.filter(c => {
+                if (!c.last_seen) return false;
+                return (nowSec - c.last_seen) <= FORTY_FIVE_DAYS_SEC;
+            });
+
             // Sort clients by last_seen (descending) then by name (ascending)
-            clients.sort((a, b) => {
+            activeClients.sort((a, b) => {
+
                 const seenA = a.last_seen || 0;
                 const seenB = b.last_seen || 0;
                 if (seenB !== seenA) return seenB - seenA; // Descending
@@ -368,7 +379,7 @@
                 return nameA.localeCompare(nameB);
             });
 
-            clients.forEach(client => {
+            activeClients.forEach(client => {
                 const isWired = client.is_wired;
                 const isHidden = client.is_hidden == 1;
                 const cat = (client.category || 'uncategorized').toLowerCase();
