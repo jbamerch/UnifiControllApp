@@ -358,13 +358,13 @@
                 hidden: { 'phone': [], 'tablet': [], 'computer': [], 'iot': [], 'other': [], 'uncategorized': [] }
             };
 
-            const FORTY_FIVE_DAYS_SEC = 45 * 24 * 60 * 60;
+            const THIRTY_DAYS_SEC = 30 * 24 * 60 * 60;
             const nowSec = Math.floor(Date.now() / 1000);
 
-            // Filter clients active in last 45 days
+            // Filter clients active in last 30 days
             activeClients = clients.filter(c => {
                 if (!c.last_seen) return false;
-                return (nowSec - c.last_seen) <= FORTY_FIVE_DAYS_SEC;
+                return (nowSec - c.last_seen) <= THIRTY_DAYS_SEC;
             });
 
             // Sort clients by last_seen (descending) then by name (ascending)
