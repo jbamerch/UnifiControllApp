@@ -154,11 +154,16 @@ def manage_people():
     if request.method == 'POST':
         name = request.json.get('name')
         if name:
+            import pymysql
             try:
                 cursor.execute("INSERT INTO people (name) VALUES (%s)", (name,))
                 conn.commit()
-            except:
-                pass # Probably exists
+            except pymysql.err.IntegrityError:
+                conn.close()
+                return jsonify({'error': 'Person already exists.'}), 400
+            except Exception as e:
+                conn.close()
+                return jsonify({'error': str(e)}), 500
 
     cursor.execute("SELECT id, name FROM people")
     people = [{'id': r['id'], 'name': r['name']} for r in cursor.fetchall()]
