@@ -66,7 +66,8 @@ def clients():
                 else:
                     raise e
 
-        users_data = list(_cached_users) # make a copy so we don't modify cache directly with db props
+        import copy
+        users_data = copy.deepcopy(_cached_users)
 
         conn = get_db()
         cursor = conn.cursor()
