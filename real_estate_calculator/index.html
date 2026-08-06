@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real Estate Deal Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-light">
+    <div class="container py-4">
+        <h1 class="text-center mb-4">Real Estate Deal Analyzer</h1>
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Property Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="calculator-form">
+                            <!-- Purchase Info -->
+                            <h6 class="border-bottom pb-2">Purchase & Financing</h6>
+                            <div class="mb-3">
+                                <label class="form-label">Property Price ($)</label>
+                                <input type="number" class="form-control" id="price" value="300000" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Down Payment ($)</label>
+                                <input type="number" class="form-control" id="down-payment" value="60000" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Interest Rate (%)</label>
+                                <input type="number" class="form-control" id="interest-rate" step="0.1" value="6.5" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Loan Term (Years)</label>
+                                <input type="number" class="form-control" id="loan-term" value="30" required>
+                            </div>
+
+                            <!-- Income -->
+                            <h6 class="border-bottom pb-2 mt-4">Income</h6>
+                            <div class="mb-3">
+                                <label class="form-label">Gross Monthly Rent ($)</label>
+                                <input type="number" class="form-control" id="monthly-rent" value="2500" required>
+                            </div>
+
+                            <!-- Expenses -->
+                            <h6 class="border-bottom pb-2 mt-4">Monthly Expenses</h6>
+                            <div class="mb-3">
+                                <label class="form-label">Property Tax ($/mo)</label>
+                                <input type="number" class="form-control" id="property-tax" value="250" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Insurance ($/mo)</label>
+                                <input type="number" class="form-control" id="insurance" value="100" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Maintenance & Repairs ($/mo)</label>
+                                <input type="number" class="form-control" id="maintenance" value="150" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mt-3">Analyze Deal</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <!-- Results -->
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Analysis Results</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="verdict-container" class="alert alert-info d-none">
+                            <h4 id="verdict-title"></h4>
+                            <p id="verdict-text" class="mb-0"></p>
+                        </div>
+
+                        <div class="row text-center mb-3">
+                            <div class="col-6 mb-3">
+                                <h6 class="text-muted">Monthly Cash Flow</h6>
+                                <h3 id="res-cash-flow" class="text-primary">$0</h3>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <h6 class="text-muted">Cash on Cash Return</h6>
+                                <h3 id="res-coc" class="text-primary">0%</h3>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="text-muted">Net Operating Income (Yr)</h6>
+                                <h4 id="res-noi">$0</h4>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="text-muted">Cap Rate</h6>
+                                <h4 id="res-cap-rate">0%</h4>
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <canvas id="roiChart" height="250"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
