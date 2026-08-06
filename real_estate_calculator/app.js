@@ -88,8 +88,55 @@ function calculateDeal() {
         verdictText.innerText = `Solid positive cash flow and good Cash-on-Cash return. It will take ${breakEvenYears} years to recover your down payment.`;
     }
 
-    // 7. Render Graph
+    // 7. Generate Breakdown
+    generateBreakdown(loanAmount, monthlyInterestRate, monthlyMortgage, totalPayments, monthlyRent, monthlyOperatingExpenses, loanTerm);
+
+    // 8. Render Graph
     renderChart(loanAmount, monthlyInterestRate, monthlyMortgage, totalPayments, downPayment, yearlyCashFlow, loanTerm);
+}
+
+function generateBreakdown(loanAmount, monthlyInterestRate, monthlyMortgage, totalPayments, monthlyRent, monthlyOperatingExpenses, loanTerm) {
+    const tbody = document.getElementById('breakdown-table-body');
+    tbody.innerHTML = ''; // Clear previous
+
+    let currentBalance = loanAmount;
+
+    // We will show up to 60 months (5 years) to avoid a massive table,
+    // or all months if they really want, but 5 years is a good sample for a modal.
+    // Let's show up to 60 months.
+    const monthsToShow = Math.min(totalPayments, 60);
+
+    for (let month = 1; month <= monthsToShow; month++) {
+        let interestPayment = 0;
+        let principalPayment = 0;
+
+        if (currentBalance > 0) {
+            interestPayment = currentBalance * monthlyInterestRate;
+            principalPayment = monthlyMortgage - interestPayment;
+
+            // Handle last payment edge case
+            if (currentBalance - principalPayment < 0) {
+                principalPayment = currentBalance;
+            }
+            currentBalance -= principalPayment;
+        }
+
+        const totalExpenses = monthlyOperatingExpenses + principalPayment + interestPayment;
+        const cashFlow = monthlyRent - totalExpenses;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>Month ${month}</td>
+            <td class="text-success">$${monthlyRent.toFixed(2)}</td>
+            <td class="text-danger">$${monthlyOperatingExpenses.toFixed(2)}</td>
+            <td class="text-danger">$${principalPayment.toFixed(2)}</td>
+            <td class="text-danger">$${interestPayment.toFixed(2)}</td>
+            <td class="text-danger fw-bold">$${totalExpenses.toFixed(2)}</td>
+            <td class="fw-bold ${cashFlow >= 0 ? 'text-success' : 'text-danger'}">$${cashFlow.toFixed(2)}</td>
+            <td>$${Math.max(0, currentBalance).toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+    }
 }
 
 function renderChart(loanAmount, monthlyInterestRate, monthlyMortgage, totalPayments, downPayment, yearlyCashFlow, loanTerm) {
